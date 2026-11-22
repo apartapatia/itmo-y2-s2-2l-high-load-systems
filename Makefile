@@ -1,5 +1,10 @@
 COMPOSE := docker compose
+BROKER ?= broker-1
+TOPIC ?= events
+KAFKA := $(COMPOSE) exec -T $(BROKER) /opt/kafka/bin
+BOOTSTRAP := --bootstrap-server localhost:9092
 
+.PHONY: topics brokers quorum produce consume lag
 .PHONY: up down ps logs config
 .PHONY: docker-up docker-down docker-ps docker-logs docker-config
 
@@ -17,3 +22,21 @@ ps docker-ps:
 
 logs docker-logs:
 	$(COMPOSE) logs --tail=100 -f
+
+topics:
+	$(KAFKA)/kafka-topics.sh $(BOOTSTRAP) --describe | column -t
+
+brokers:
+	$(KAFKA)/kafka-broker-api-versions.sh $(BOOTSTRAP)
+
+quorum:
+	$(KAFKA)/kafka-metadata-quorum.sh $(BOOTSTRAP) describe --status
+
+produce:
+	$(KAFKA)/kafka-console-producer.sh $(BOOTSTRAP) --topic "$(TOPIC)" --command-property acks=all
+
+consume:
+	$(KAFKA)/kafka-console-consumer.sh $(BOOTSTRAP) --topic "$(TOPIC)" --from-beginning --formatter-property print.partition=true --formatter-property print.offset=true
+
+lag:
+	$(KAFKA)/kafka-consumer-groups.sh $(BOOTSTRAP) --describe --group events-processor
