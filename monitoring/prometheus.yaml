@@ -1,0 +1,6 @@
+scrape_configs:
+  - job_name: kafka
+    scrape_interval: 3s
+    scrape_timeout: 2s
+    static_configs:
+      - targets: [kafka-exporter:9308]

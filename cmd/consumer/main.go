@@ -126,6 +126,9 @@ func run(ctx context.Context) error {
 		for _, r := range f.Records() {
 			if !first[r.Partition] {
 				log.Printf("processing %s[%d] offset=%d", r.Topic, r.Partition, r.Offset)
+				_, resume := telemetry.Tracer.Start(ctx, "partition resumed")
+				resume.SetAttributes(attribute.String("worker", worker), attribute.Int("partition", int(r.Partition)), attribute.Int64("first_offset", r.Offset))
+				resume.End()
 				first[r.Partition] = true
 			}
 			if err := handleRecord(ctx, cl, worker, delay, r); err != nil {

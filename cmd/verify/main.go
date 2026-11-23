@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/events"
+	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/telemetry"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type userStats struct {
@@ -129,14 +131,15 @@ func readDLT(ctx context.Context, s summary) error {
 	return nil
 }
 
-func run() error {
+func run(parent context.Context) error {
 	login := os.Getenv("GITHUB_LOGIN")
 	if login == "" {
 		return fmt.Errorf("set GITHUB_LOGIN")
 	}
-	fmt.Printf("%s %s\n", login, events.Now().Format(time.RFC3339))
+	timestamp := events.Now().Format(time.RFC3339)
+	fmt.Printf("%s %s\n", login, timestamp)
 	const verificationTimeout = 2 * time.Minute
-	ctx, cancel := context.WithTimeout(context.Background(), verificationTimeout)
+	ctx, cancel := context.WithTimeout(parent, verificationTimeout)
 	defer cancel()
 	snapshot, err := events.ReadSnapshot(ctx)
 	if err != nil {
@@ -151,23 +154,28 @@ func run() error {
 	}
 	users := slices.Sorted(maps.Keys(s))
 	var late int
-	missing := false
+	var missing int64
 	for _, user := range users {
 		u := s[user]
 		gaps := u.gaps()
 		fmt.Printf("user=%s gaps=%v out_of_order=%d\n", user, gaps, u.late)
-		missing = missing || len(gaps) > 0
+		missing += u.maxSeen - int64(len(u.sequences))
 		late += u.late
 	}
 	fmt.Printf("users=%d duplicates=%d out_of_order=%d\n", len(users), snapshot.Duplicates, late)
-	if missing {
+	_, span := telemetry.Tracer.Start(ctx, "verify result")
+	span.SetAttributes(attribute.String("login", login), attribute.String("checked_at", timestamp),
+		attribute.String("run", os.Getenv("VERIFY_RUN")), attribute.String("key_mode", os.Getenv("KEY_MODE")),
+		attribute.Int("users", len(users)), attribute.Int64("gaps", missing), attribute.Int64("duplicates", snapshot.Duplicates), attribute.Int("out_of_order", late))
+	span.End()
+	if missing > 0 {
 		return fmt.Errorf("missing sequence numbers")
 	}
 	return nil
 }
 
 func main() {
-	if err := run(); err != nil {
+	if err := telemetry.Run(context.Background(), "verify", run); err != nil {
 		log.Fatal(err)
 	}
 }

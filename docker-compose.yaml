@@ -94,9 +94,23 @@ services:
     environment:
       BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      VERIFY_RUN: ${COMPOSE_PROJECT_NAME}
+      KEY_MODE: ${KEY_MODE:-user_id}
       GITHUB_LOGIN: ${GITHUB_LOGIN:-}
       SINK_URL: http://sink:8080
       PROCESSING_DELAY_MS: ${PROCESSING_DELAY_MS:-20}
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    profiles: [monitoring]
+    restart: on-failure
+    depends_on:
+      init-topics: {condition: service_completed_successfully}
+    command:
+      - --kafka.server=broker-1:9092
+      - --kafka.server=broker-2:9092
+      - --kafka.server=broker-3:9092
+      - --refresh.metadata=3s
 
   lgtm:
     image: grafana/otel-lgtm:0.39.0
@@ -105,11 +119,13 @@ services:
       - "127.0.0.1:3000:3000"
     volumes:
       - lgtm-data:/data
+      - ./monitoring/prometheus.yaml:/otel-lgtm/prometheus.yaml:ro
+      - ./monitoring/grafana/dashboards:/otel-lgtm/kafka-dashboards:ro
       - ./monitoring/grafana/provider.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/kafka.yaml:ro
-      - ./monitoring/grafana/kafka-events.json:/otel-lgtm/kafka-events.json:ro
 
 volumes:
   lgtm-data:
+    name: ${LGTM_VOLUME:-${COMPOSE_PROJECT_NAME}_lgtm-data}
   broker-1-data:
   broker-2-data:
   broker-3-data:
