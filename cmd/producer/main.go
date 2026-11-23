@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/events"
+	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/telemetry"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -93,7 +94,7 @@ func run(ctx context.Context) error {
 		if mode == "user_id" {
 			record.Key = []byte(e.User)
 		}
-		if err := client.ProduceSync(context.Background(), record).FirstErr(); err != nil {
+		if err := telemetry.Publish(context.WithoutCancel(ctx), client, record, e.ID); err != nil {
 			return fmt.Errorf("send event %s user %s seq %d: %w", e.ID, e.User, e.Seq, err)
 		}
 	}
@@ -102,7 +103,7 @@ func run(ctx context.Context) error {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx); err != nil {
+	if err := telemetry.Run(ctx, "producer", run); err != nil {
 		log.Fatal(err)
 	}
 }

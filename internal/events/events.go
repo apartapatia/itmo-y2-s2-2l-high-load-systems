@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var moscow = time.FixedZone("MSK", 3*60*60)
@@ -64,7 +65,7 @@ func NewKafkaClient(opts ...kgo.Opt) (*kgo.Client, error) {
 
 const sinkRequestTimeout = 30 * time.Second
 
-var httpClient = &http.Client{Timeout: sinkRequestTimeout}
+var httpClient = &http.Client{Timeout: sinkRequestTimeout, Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
 func SaveEntry(ctx context.Context, entry Entry) error {
 	data, err := json.Marshal(entry)

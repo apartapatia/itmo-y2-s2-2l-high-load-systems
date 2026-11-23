@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,7 +14,12 @@ import (
 	"time"
 
 	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/events"
+	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/telemetry"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/plugin/kotel"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func decode(value []byte) (events.Event, error) {
@@ -32,8 +36,15 @@ func decode(value []byte) (events.Event, error) {
 
 const maxProcessingAttempts = 3
 
-func process(ctx context.Context, cl *kgo.Client, worker string, delay time.Duration, r *kgo.Record) error {
+type recordClient interface {
+	telemetry.Publisher
+	CommitRecords(context.Context, ...*kgo.Record) error
+}
+
+func process(ctx context.Context, cl telemetry.Publisher, worker string, delay time.Duration, r *kgo.Record) error {
+	span := trace.SpanFromContext(ctx)
 	var reason error
+	var eventID string
 	for attempt := 1; attempt <= maxProcessingAttempts; attempt++ {
 		select {
 		case <-ctx.Done():
@@ -41,10 +52,13 @@ func process(ctx context.Context, cl *kgo.Client, worker string, delay time.Dura
 		case <-time.After(delay):
 		}
 		e, err := decode(r.Value)
+		eventID = e.ID
+		span.SetAttributes(attribute.String("event.id", eventID))
 		if err == nil {
 			entry := events.Entry{ID: e.ID, User: e.User, Seq: e.Seq, Worker: worker, Topic: r.Topic, Partition: r.Partition, Offset: r.Offset}
 			return events.SaveEntry(ctx, entry)
 		}
+		span.AddEvent("attempt failed", trace.WithAttributes(attribute.Int("attempt", attempt), attribute.String("reason", err.Error())))
 		reason = err
 		log.Printf("%s[%d] offset=%d attempt=%d: %v", r.Topic, r.Partition, r.Offset, attempt, err)
 	}
@@ -54,7 +68,26 @@ func process(ctx context.Context, cl *kgo.Client, worker string, delay time.Dura
 		{Key: "source-partition", Value: []byte(strconv.Itoa(int(r.Partition)))},
 		{Key: "source-offset", Value: []byte(strconv.FormatInt(r.Offset, 10))},
 	}}
-	return cl.ProduceSync(ctx, dlt).FirstErr()
+	if err := telemetry.Publish(ctx, cl, dlt, eventID); err != nil {
+		return err
+	}
+	span.SetAttributes(attribute.String("outcome", "dlt"))
+	return nil
+}
+
+func handleRecord(ctx context.Context, cl recordClient, worker string, delay time.Duration, r *kgo.Record) (err error) {
+	ctx = otel.GetTextMapPropagator().Extract(ctx, kotel.NewRecordCarrier(r))
+	ctx, span := telemetry.Tracer.Start(ctx, "process "+r.Topic, trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(attribute.Int64("kafka.offset", r.Offset), attribute.Int("kafka.partition", int(r.Partition))))
+	defer func() { telemetry.End(span, err) }()
+	if err := process(ctx, cl, worker, delay, r); err != nil {
+		return fmt.Errorf("process %d:%d: %w", r.Partition, r.Offset, err)
+	}
+	if err := cl.CommitRecords(ctx, r); err != nil {
+		return fmt.Errorf("commit %d:%d: %w", r.Partition, r.Offset, err)
+	}
+	span.AddEvent("offset committed")
+	return nil
 }
 
 func run(ctx context.Context) error {
@@ -95,11 +128,8 @@ func run(ctx context.Context) error {
 				log.Printf("processing %s[%d] offset=%d", r.Topic, r.Partition, r.Offset)
 				first[r.Partition] = true
 			}
-			if err := process(ctx, cl, worker, delay, r); err != nil {
-				return fmt.Errorf("process %d:%d: %w", r.Partition, r.Offset, err)
-			}
-			if err := cl.CommitRecords(ctx, r); err != nil {
-				return fmt.Errorf("commit %d:%d: %w", r.Partition, r.Offset, err)
+			if err := handleRecord(ctx, cl, worker, delay, r); err != nil {
+				return err
 			}
 		}
 		cl.AllowRebalance()
@@ -110,7 +140,7 @@ func run(ctx context.Context) error {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	if err := telemetry.Run(ctx, "consumer", run); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)
 	}
 }

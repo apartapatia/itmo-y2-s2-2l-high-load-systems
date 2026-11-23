@@ -8,6 +8,9 @@ import (
 	"sync"
 
 	"github.com/apartapatia/itmo-y2-s2-2l-high-load-systems/internal/events"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const maxEventBodyBytes = 1 << 20
@@ -25,14 +28,17 @@ func (s *store) save(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid entry", http.StatusBadRequest)
 		return
 	}
+	outcome := "saved"
 	s.mu.Lock()
 	if _, ok := s.seen[e.ID]; ok {
+		outcome = "duplicate"
 		s.data.Duplicates++
 	} else {
 		s.seen[e.ID] = struct{}{}
 		s.data.Entries = append(s.data.Entries, e)
 	}
 	s.mu.Unlock()
+	trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("event.id", e.ID), attribute.String("outcome", outcome))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -49,7 +55,7 @@ func (s *store) snapshot(w http.ResponseWriter, r *http.Request) {
 func NewHandler() http.Handler {
 	s := store{seen: make(map[string]struct{})}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /events", s.save)
+	mux.Handle("POST /events", otelhttp.NewHandler(http.HandlerFunc(s.save), "POST /events"))
 	mux.HandleFunc("GET /events", s.snapshot)
 	return mux
 }

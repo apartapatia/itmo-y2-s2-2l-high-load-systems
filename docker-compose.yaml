@@ -72,12 +72,15 @@ services:
     stop_grace_period: 60s
     environment:
       BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       EVENTS_PER_SECOND: ${EVENTS_PER_SECOND:-10}
       KEY_MODE: ${KEY_MODE:-user_id}
 
   sink:
     build: .
     entrypoint: ["/sink"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
   consumer:
     build: .
@@ -90,11 +93,23 @@ services:
       replicas: 3
     environment:
       BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       GITHUB_LOGIN: ${GITHUB_LOGIN:-}
       SINK_URL: http://sink:8080
       PROCESSING_DELAY_MS: ${PROCESSING_DELAY_MS:-20}
 
+  lgtm:
+    image: grafana/otel-lgtm:0.39.0
+    profiles: [monitoring]
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - lgtm-data:/data
+      - ./monitoring/grafana/provider.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/kafka.yaml:ro
+      - ./monitoring/grafana/kafka-events.json:/otel-lgtm/kafka-events.json:ro
+
 volumes:
+  lgtm-data:
   broker-1-data:
   broker-2-data:
   broker-3-data:

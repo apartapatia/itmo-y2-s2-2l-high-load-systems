@@ -1,0 +1,81 @@
+[vars]
+kafka = 'docker compose exec -T "${BROKER:-broker-1}" /opt/kafka/bin'
+bootstrap = '--bootstrap-server localhost:9092'
+
+#docker
+
+[tasks.config]
+run = "docker compose config --quiet"
+
+[tasks.up]
+depends = ["config"]
+run = "docker compose up -d"
+
+[tasks.down]
+run = "docker compose --profile monitoring down"
+
+[tasks.ps]
+run = "docker compose ps -a"
+
+[tasks.logs]
+run = "docker compose logs --tail=100 -f"
+
+[tasks.start]
+run = "docker compose start ${SERVICE:?specify SERVICE}"
+
+[tasks.stop]
+run = "docker compose stop ${SERVICE:?specify SERVICE}"
+
+[tasks.client-logs]
+run = "docker compose logs --since 2m --tail 10 producer consumer"
+
+[tasks.monitoring-up]
+env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://lgtm:4318"
+run = "docker compose --profile monitoring up --build -d"
+
+#kafka
+
+[tasks.brokers]
+run = "{{ vars.kafka }}/kafka-broker-api-versions.sh {{ vars.bootstrap }}"
+
+[tasks.quorum]
+run = "{{ vars.kafka }}/kafka-metadata-quorum.sh {{ vars.bootstrap }} describe --status"
+
+[tasks.topics]
+run = "{{ vars.kafka }}/kafka-topics.sh {{ vars.bootstrap }} --describe | column -t"
+
+[tasks.lag]
+run = '''
+{{ vars.kafka }}/kafka-consumer-groups.sh \
+  {{ vars.bootstrap }} --describe --group events-processor
+'''
+
+[tasks.produce]
+run = '''
+{{ vars.kafka }}/kafka-console-producer.sh \
+  {{ vars.bootstrap }} --topic "${TOPIC:-events}" \
+  --command-property acks=all
+'''
+
+[tasks.consume]
+run = '''
+{{ vars.kafka }}/kafka-console-consumer.sh \
+  {{ vars.bootstrap }} --topic "${TOPIC:-events}" --from-beginning \
+  --formatter-property print.partition=true \
+  --formatter-property print.offset=true
+'''
+
+[tasks.verify]
+run = "docker compose run --rm --no-deps -T --entrypoint /verify consumer"
+
+[tasks.kill-consumer]
+run = '''
+worker=$(docker compose ps -q consumer | head -n 1)
+test -n "$worker" && docker kill --signal=KILL "$worker"
+'''
+
+[tasks.rebalance]
+run = '''
+docker compose logs --no-color --since 3m --timestamps consumer |
+  grep -E 'assigned|revoked|processing events\['
+'''
