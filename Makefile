@@ -5,6 +5,7 @@ KAFKA := $(COMPOSE) exec -T $(BROKER) /opt/kafka/bin
 BOOTSTRAP := --bootstrap-server localhost:9092
 
 .PHONY: topics brokers quorum produce consume lag # kafka
+.PHONY: kill-consumer rebalance stop start client-logs # kafka
 .PHONY: up down ps logs config # docker
 .PHONY: docker-up docker-down docker-ps docker-logs docker-config # docker
 .PHONY: verify
@@ -44,3 +45,17 @@ lag:
 
 verify:
 	@$(COMPOSE) run --rm --no-deps -T --entrypoint /verify consumer
+
+kill-consumer:
+	@worker=$$($(COMPOSE) ps -q consumer | head -n 1); \
+	test -n "$$worker" && docker kill --signal=KILL "$$worker"
+
+rebalance:
+	@$(COMPOSE) logs --no-color --since 3m --timestamps consumer | grep -E 'assigned|revoked|processing events\['
+
+stop start:
+	@test -n "$(SERVICE)" || { echo 'specify SERVICE' >&2; exit 1; }
+	$(COMPOSE) $@ $(SERVICE)
+
+client-logs:
+	$(COMPOSE) logs --since 2m --tail 10 producer consumer
