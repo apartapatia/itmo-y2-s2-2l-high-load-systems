@@ -62,6 +62,38 @@ services:
     volumes:
       - ./scripts/create-topics.sh:/scripts/create-topics.sh:ro
 
+  producer:
+    build: .
+    restart: on-failure
+    depends_on:
+      init-topics: {condition: service_completed_successfully}
+    deploy:
+      replicas: 3
+    stop_grace_period: 60s
+    environment:
+      BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
+      EVENTS_PER_SECOND: ${EVENTS_PER_SECOND:-10}
+      KEY_MODE: ${KEY_MODE:-user_id}
+
+  sink:
+    build: .
+    entrypoint: ["/sink"]
+
+  consumer:
+    build: .
+    entrypoint: ["/consumer"]
+    restart: on-failure
+    depends_on:
+      sink: {condition: service_started}
+      init-topics: {condition: service_completed_successfully}
+    deploy:
+      replicas: 3
+    environment:
+      BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
+      GITHUB_LOGIN: ${GITHUB_LOGIN:-}
+      SINK_URL: http://sink:8080
+      PROCESSING_DELAY_MS: ${PROCESSING_DELAY_MS:-20}
+
 volumes:
   broker-1-data:
   broker-2-data:

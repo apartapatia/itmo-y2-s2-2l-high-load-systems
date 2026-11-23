@@ -4,9 +4,10 @@ TOPIC ?= events
 KAFKA := $(COMPOSE) exec -T $(BROKER) /opt/kafka/bin
 BOOTSTRAP := --bootstrap-server localhost:9092
 
-.PHONY: topics brokers quorum produce consume lag
-.PHONY: up down ps logs config
-.PHONY: docker-up docker-down docker-ps docker-logs docker-config
+.PHONY: topics brokers quorum produce consume lag # kafka
+.PHONY: up down ps logs config # docker
+.PHONY: docker-up docker-down docker-ps docker-logs docker-config # docker
+.PHONY: verify
 
 up docker-up: config
 	$(COMPOSE) up -d
@@ -40,3 +41,6 @@ consume:
 
 lag:
 	$(KAFKA)/kafka-consumer-groups.sh $(BOOTSTRAP) --describe --group events-processor
+
+verify:
+	@$(COMPOSE) run --rm --no-deps -T --entrypoint /verify consumer
