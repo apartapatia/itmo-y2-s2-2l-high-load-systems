@@ -1,0 +1,611 @@
+{
+  "uid": "tasks-metrics",
+  "title": "tasks metrics",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "1 \u00b7 Consumer failure and rebalance",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Consumer lag by partition (records)",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 14,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Look for a rise in lag during the rebalance and a decline as the consumer catches up. Select a series to inspect assignments for that partition.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "fillOpacity": 7
+          },
+          "min": 0,
+          "links": [
+            {
+              "title": "Inspect partition ${__field.labels.partition}",
+              "url": "/d/tasks-metrics/tasks-metrics?from=${__from}&to=${__to}&var-partition=${__field.labels.partition}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "kafka_consumergroup_lag{consumergroup=\"events-processor\",topic=\"events\"} >= 0",
+          "legendFormat": "Partition {{partition}}",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Consumer group members",
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 10,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "A short rebalance can fall between scrapes.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false,
+            "fillOpacity": 7
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "kafka_consumergroup_members{consumergroup=\"events-processor\"}",
+          "legendFormat": "Consumers",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "First record processed after partition assignment",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 6
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "description": "Compare the container and first processed offset for the same partition before and after the failure.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "tableType": "spans",
+          "limit": 40,
+          "query": "{ resource.service.name = \"consumer\" && name = \"partition resumed\" && span.partition = ${partition:raw} } | select(span.worker, span.partition, span.first_offset)"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceIdHidden": true,
+              "traceService": true,
+              "traceName": true,
+              "spanID": true,
+              "name": true,
+              "service.name": true,
+              "duration": true,
+              "Span ID": true,
+              "Trace ID": true,
+              "Root Service": true,
+              "Root Name": true,
+              "Name": true,
+              "Duration": true
+            },
+            "indexByName": {
+              "time": 0,
+              "worker": 1,
+              "partition": 2,
+              "first_offset": 3
+            },
+            "renameByName": {
+              "time": "Start time",
+              "worker": "Container",
+              "partition": "Partition",
+              "first_offset": "First processed offset"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "2 \u00b7 Broker failure and recovery",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Partition leader (broker ID)",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "A change in broker ID marks a leader change for that partition.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false,
+            "fillOpacity": 7
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "kafka_topic_partition_leader{topic=\"events\"}",
+          "legendFormat": "Partition {{partition}}",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "state-timeline",
+      "title": "In-sync replicas (write threshold: 2)",
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "A gap means the replica count was unavailable at scrape time.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": false,
+            "fillOpacity": 85,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "0 \u00b7 Below write threshold",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "1 \u00b7 Below write threshold",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "2 \u00b7 At write threshold",
+                  "color": "yellow",
+                  "index": 2
+                },
+                "3": {
+                  "text": "3 \u00b7 Fully replicated",
+                  "color": "green",
+                  "index": 3
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "kafka_topic_partition_in_sync_replica{topic=\"events\"}",
+          "legendFormat": "Partition {{partition}}",
+          "range": true
+        }
+      ],
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Log growth and consumer commit rate (records/s)",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 16,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Rates are estimated over 30 seconds. When both rise above zero after an outage, writes and offset commits have resumed.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "fillOpacity": 7
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(deriv(kafka_topic_partition_current_offset{topic=\"events\"}[30s]))",
+          "legendFormat": "Log growth",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(deriv(kafka_consumergroup_current_offset{consumergroup=\"events-processor\",topic=\"events\"}[30s]))",
+          "legendFormat": "Consumer commits",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Kafka exporter scrape health",
+      "gridPos": {
+        "x": 16,
+        "y": 22,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "1 means Prometheus successfully scraped the exporter. Individual Kafka metrics may still be unavailable.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false,
+            "fillOpacity": 7
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"kafka\"}",
+          "legendFormat": "Scrape success",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Producer delivery failures",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 6
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "description": "Shows sends that ended in an error. Sends that succeeded after a retry are excluded. Select an event_id to open its trace in Tempo.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "tableType": "spans",
+          "limit": 40,
+          "query": "{ resource.service.name = \"producer\" && status = error } | select(span.event.id, span:statusMessage)"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceService": true,
+              "traceName": true,
+              "spanID": true,
+              "name": true,
+              "service.name": true,
+              "duration": true,
+              "Span ID": true,
+              "Trace ID": true,
+              "Root Service": true,
+              "Root Name": true,
+              "Name": true,
+              "Duration": true
+            },
+            "indexByName": {
+              "time": 0,
+              "event.id": 1,
+              "statusMessage": 2
+            },
+            "renameByName": {
+              "time": "Start time",
+              "event.id": "event_id",
+              "statusMessage": "Delivery error"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open delivery trace",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "queryType": "traceId",
+                        "query": "${__data.fields.traceIdHidden}"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "3 \u00b7 Sequence gaps, duplicates and ordering",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Verification results by key mode (user_id vs none)",
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 6
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "description": "Each row is a completed verify run. Zero is a measured result. An empty table means no results were found in the selected interval.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "tableType": "spans",
+          "limit": 40,
+          "query": "{ resource.service.name = \"verify\" && name = \"verify result\" } | select(span.checked_at, span.login, span.run, span.key_mode, span.users, span.gaps, span.duplicates, span.out_of_order)"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceIdHidden": true,
+              "traceService": true,
+              "traceName": true,
+              "spanID": true,
+              "name": true,
+              "service.name": true,
+              "duration": true,
+              "Span ID": true,
+              "Trace ID": true,
+              "Root Service": true,
+              "Root Name": true,
+              "Name": true,
+              "Duration": true
+            },
+            "indexByName": {
+              "checked_at": 0,
+              "login": 1,
+              "run": 2,
+              "key_mode": 3,
+              "users": 4,
+              "gaps": 5,
+              "duplicates": 6,
+              "out_of_order": 7
+            },
+            "renameByName": {
+              "checked_at": "Checked at",
+              "login": "GitHub login",
+              "run": "Run",
+              "key_mode": "Key mode",
+              "users": "Users",
+              "gaps": "Missing sequence numbers",
+              "duplicates": "Duplicates",
+              "out_of_order": "Out-of-order events"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "partition",
+        "label": "Partition",
+        "type": "custom",
+        "query": "0,1,2",
+        "multi": false,
+        "includeAll": true,
+        "allValue": "span.partition",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  }
+}

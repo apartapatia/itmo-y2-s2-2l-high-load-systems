@@ -1,0 +1,178 @@
+{
+  "uid": "kafka-events",
+  "title": "Kafka event traces",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Events routed to the dead-letter topic",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"consumer\" && span.outcome = \"dlt\" } | select(span.kafka.partition, span.kafka.offset, span.event.id)",
+          "tableType": "spans",
+          "limit": 20
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceService": true,
+              "traceName": true,
+              "name": true,
+              "service.name": true,
+              "outcome": true
+            },
+            "indexByName": {
+              "time": 0,
+              "kafka.partition": 1,
+              "kafka.offset": 2,
+              "duration": 3,
+              "event.id": 4,
+              "spanID": 5
+            },
+            "renameByName": {
+              "time": "Start time",
+              "kafka.partition": "Partition",
+              "kafka.offset": "Offset",
+              "duration": "Duration",
+              "event.id": "event_id",
+              "spanID": "span"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Start time",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 330
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Events received by the sink",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"sink\" && (span.outcome = \"saved\" || span.outcome = \"duplicate\") } | select(span.outcome, span.event.id)",
+          "tableType": "spans",
+          "limit": 20
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceService": true,
+              "traceName": true,
+              "name": true,
+              "service.name": true
+            },
+            "indexByName": {
+              "time": 0,
+              "outcome": 1,
+              "duration": 2,
+              "event.id": 3,
+              "spanID": 4
+            },
+            "renameByName": {
+              "time": "Start time",
+              "outcome": "Outcome",
+              "duration": "Duration",
+              "event.id": "event_id",
+              "spanID": "span"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Start time",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 330
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
