@@ -13,6 +13,15 @@ run = "docker compose up --build -d"
 [tasks.down]
 run = "docker compose down"
 
+[tasks.reset-kafka]
+run = '''
+volumes=$(docker compose config --format json | jq -er '.volumes["broker-1-data","broker-2-data","broker-3-data"].name // error("missing broker volume")')
+docker compose down
+for volume in $volumes; do
+  docker volume rm --force "$volume"
+done
+'''
+
 [tasks.ps]
 run = "docker compose ps -a"
 
@@ -65,8 +74,14 @@ run = "docker compose run --rm --no-deps -T --entrypoint /verify consumer"
 
 [tasks.kill-consumer]
 run = '''
-worker=$(docker compose ps -q consumer | head -n 1)
-test -n "$worker" && docker kill --signal=KILL "$worker"
+workers=$(docker compose ps --status running -q consumer)
+if [ -z "$workers" ]; then
+  echo "No running consumer in this Compose project. Check: docker compose ps -a consumer" >&2
+  exit 1
+fi
+worker=${workers%%[[:space:]]*}
+echo "Stopping consumer $worker"
+docker kill --signal=KILL "$worker"
 '''
 
 [tasks.rebalance]
