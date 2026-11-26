@@ -72,7 +72,7 @@ services:
     stop_grace_period: 60s
     environment:
       BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
       EVENTS_PER_SECOND: ${EVENTS_PER_SECOND:-10}
       KEY_MODE: ${KEY_MODE:-user_id}
 
@@ -80,7 +80,7 @@ services:
     build: .
     entrypoint: ["/sink"]
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
 
   consumer:
     build: .
@@ -93,7 +93,7 @@ services:
       replicas: 3
     environment:
       BOOTSTRAP_SERVERS: broker-1:9092,broker-2:9092,broker-3:9092
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
       VERIFY_RUN: ${COMPOSE_PROJECT_NAME}
       KEY_MODE: ${KEY_MODE:-user_id}
       GITHUB_LOGIN: ${GITHUB_LOGIN:-}
@@ -102,7 +102,6 @@ services:
 
   kafka-exporter:
     image: danielqsj/kafka-exporter:v1.9.0
-    profiles: [monitoring]
     restart: on-failure
     depends_on:
       init-topics: {condition: service_completed_successfully}
@@ -114,7 +113,6 @@ services:
 
   lgtm:
     image: grafana/otel-lgtm:0.39.0
-    profiles: [monitoring]
     ports:
       - "127.0.0.1:3000:3000"
     volumes:

@@ -8,11 +8,10 @@ bootstrap = '--bootstrap-server localhost:9092'
 run = "docker compose config --quiet"
 
 [tasks.up]
-depends = ["config"]
-run = "docker compose up -d"
+run = "docker compose up --build -d"
 
 [tasks.down]
-run = "docker compose --profile monitoring down"
+run = "docker compose down"
 
 [tasks.ps]
 run = "docker compose ps -a"
@@ -28,10 +27,6 @@ run = "docker compose stop ${SERVICE:?specify SERVICE}"
 
 [tasks.client-logs]
 run = "docker compose logs --since 2m --tail 10 producer consumer"
-
-[tasks.monitoring-up]
-env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://lgtm:4318"
-run = "docker compose --profile monitoring up --build -d"
 
 #kafka
 
@@ -66,13 +61,7 @@ run = '''
 '''
 
 [tasks.verify]
-run = '''
-set --
-if [ -n "$(docker compose --profile monitoring ps --status running -q lgtm)" ]; then
-  set -- -e OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4318
-fi
-docker compose run --rm --no-deps -T "$@" --entrypoint /verify consumer
-'''
+run = "docker compose run --rm --no-deps -T --entrypoint /verify consumer"
 
 [tasks.kill-consumer]
 run = '''
