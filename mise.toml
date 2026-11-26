@@ -14,13 +14,7 @@ run = "docker compose up --build -d"
 run = "docker compose down"
 
 [tasks.reset-kafka]
-run = '''
-volumes=$(docker compose config --format json | jq -er '.volumes["broker-1-data","broker-2-data","broker-3-data"].name // error("missing broker volume")')
-docker compose down
-for volume in $volumes; do
-  docker volume rm --force "$volume"
-done
-'''
+run = "docker compose down --volumes"
 
 [tasks.ps]
 run = "docker compose ps -a"

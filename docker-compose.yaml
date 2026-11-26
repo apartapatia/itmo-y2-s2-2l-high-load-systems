@@ -123,7 +123,6 @@ services:
 
 volumes:
   lgtm-data:
-    name: ${LGTM_VOLUME:-${COMPOSE_PROJECT_NAME}_lgtm-data}
   broker-1-data:
   broker-2-data:
   broker-3-data:
